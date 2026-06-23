@@ -23,7 +23,7 @@ func NewExpenseService(expenseRepo *repository.ExpenseRepository, groupRepo *rep
 	}
 }
 
-func (s *ExpenseService) CreateExpense(ctx context.Context, requestingUserID string, expense *domain.Expense) (*domain.Expense, error) {
+func (s *ExpenseService) CreateExpense(ctx context.Context, requestingUserID string, expense *domain.Expense, splitUserIDs []string) (*domain.Expense, error) {
 	if expense.PaidBy == "" {
 		expense.PaidBy = requestingUserID
 	}
@@ -34,6 +34,18 @@ func (s *ExpenseService) CreateExpense(ctx context.Context, requestingUserID str
 	}
 	if !isMember {
 		return nil, errors.New("usuário não faz parte deste grupo")
+	}
+
+	if len(splitUserIDs) == 0 {
+		splitUserIDs = []string{requestingUserID}
+	}
+	amountPerPerson := expense.Amount / float64(len(splitUserIDs))
+	expense.Splits = make([]domain.ExpenseSplit, 0, len(splitUserIDs))
+	for _, uid := range splitUserIDs {
+		expense.Splits = append(expense.Splits, domain.ExpenseSplit{
+			UserID:     uid,
+			AmountOwed: amountPerPerson,
+		})
 	}
 
 	err = s.expenseRepo.Create(ctx, expense)
@@ -91,6 +103,26 @@ func (s *ExpenseService) DeleteExpense(ctx context.Context, expenseID string, us
 	}
 
 	return s.expenseRepo.Delete(ctx, expenseID)
+}
+
+func (s *ExpenseService) GetPersonalBalances(ctx context.Context, userID string) ([]*domain.PersonBalance, error) {
+	return s.expenseRepo.GetPersonalBalances(ctx, userID)
+}
+
+func (s *ExpenseService) Settle(ctx context.Context, payerID string, payeeID string, amount float64) error {
+	if amount <= 0 {
+		return errors.New("valor deve ser maior que zero")
+	}
+	settlement := &domain.Settlement{
+		PayerID: payerID,
+		PayeeID: payeeID,
+		Amount:  amount,
+	}
+	return s.expenseRepo.CreateSettlement(ctx, settlement)
+}
+
+func (s *ExpenseService) GetUserGlobalBalances(ctx context.Context, userID string) ([]*domain.GroupBalance, error) {
+	return s.expenseRepo.GetUserGlobalBalances(ctx, userID)
 }
 
 func (s *ExpenseService) GetGroupBalances(ctx context.Context, groupID string, userID string) ([]*domain.Balance, error) {

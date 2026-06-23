@@ -10,10 +10,11 @@ import (
 
 type GroupService struct {
 	groupRepo *repository.GroupRepository
+	userRepo  *repository.UserRepository
 }
 
-func NewGroupService(groupRepo *repository.GroupRepository) *GroupService {
-	return &GroupService{groupRepo: groupRepo}
+func NewGroupService(groupRepo *repository.GroupRepository, userRepo *repository.UserRepository) *GroupService {
+	return &GroupService{groupRepo: groupRepo, userRepo: userRepo}
 }
 
 func (s *GroupService) CreateGroup(ctx context.Context, name string, createdByUserID string, memberIDs []string) (*domain.Group, error) {
@@ -60,7 +61,7 @@ func (s *GroupService) GetGroupDetails(ctx context.Context, groupID string, user
 	return s.groupRepo.FindByID(ctx, groupID)
 }
 
-func (s *GroupService) AddMember(ctx context.Context, groupID string, newUserID string, requestingUserID string) error {
+func (s *GroupService) AddMemberByEmail(ctx context.Context, groupID string, email string, requestingUserID string) error {
 	isMember, err := s.groupRepo.IsMember(ctx, groupID, requestingUserID)
 	if err != nil {
 		return err
@@ -68,5 +69,23 @@ func (s *GroupService) AddMember(ctx context.Context, groupID string, newUserID 
 	if !isMember {
 		return errors.New("você não faz parte deste grupo")
 	}
-	return s.groupRepo.AddMember(ctx, groupID, newUserID)
+
+	user, err := s.userRepo.FindByEmail(ctx, email)
+	if err != nil {
+		return errors.New("usuário não encontrado")
+	}
+
+	return s.groupRepo.AddMember(ctx, groupID, user.ID)
+}
+
+func (s *GroupService) GetMembers(ctx context.Context, groupID string) ([]*domain.User, error) {
+	return s.groupRepo.GetMembers(ctx, groupID)
+}
+
+func (s *GroupService) JoinGroup(ctx context.Context, groupID string, userID string) error {
+	_, err := s.groupRepo.FindByID(ctx, groupID)
+	if err != nil {
+		return errors.New("grupo não encontrado")
+	}
+	return s.groupRepo.AddMember(ctx, groupID, userID)
 }

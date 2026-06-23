@@ -18,12 +18,19 @@ func NewGroupHandler(groupService *service.GroupService) *GroupHandler {
 }
 
 type createGroupRequest struct {
-	Name      string   `json:"name"`
-	MemberIDs []string `json:"member_ids"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	MemberIDs   []string `json:"member_ids"`
 }
 
 type addMemberRequest struct {
+	Email string `json:"email"`
+}
+
+type memberResponse struct {
 	UserID string `json:"user_id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
 }
 
 func (h *GroupHandler) ListGroups(w http.ResponseWriter, r *http.Request) {
@@ -70,18 +77,52 @@ func (h *GroupHandler) GetGroup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, group)
 }
 
+func (h *GroupHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
+	groupID := chi.URLParam(r, "id")
+
+	users, err := h.groupService.GetMembers(r.Context(), groupID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "erro ao buscar membros")
+		return
+	}
+
+	members := make([]memberResponse, 0, len(users))
+	for _, u := range users {
+		members = append(members, memberResponse{
+			UserID: u.ID,
+			Name:   u.Name,
+			Email:  u.Email,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, members)
+}
+
+func (h *GroupHandler) JoinGroup(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(UserIDKey).(string)
+	groupID := chi.URLParam(r, "id")
+
+	err := h.groupService.JoinGroup(r.Context(), groupID, userID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "você entrou no grupo"})
+}
+
 func (h *GroupHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(UserIDKey).(string)
 	groupID := chi.URLParam(r, "id")
 
 	var req addMemberRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil || req.UserID == "" {
-		writeError(w, http.StatusBadRequest, "user_id é obrigatório")
+	if err != nil || req.Email == "" {
+		writeError(w, http.StatusBadRequest, "email é obrigatório")
 		return
 	}
 
-	err = h.groupService.AddMember(r.Context(), groupID, req.UserID, userID)
+	err = h.groupService.AddMemberByEmail(r.Context(), groupID, req.Email, userID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

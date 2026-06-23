@@ -53,7 +53,7 @@ func (r *GroupRepository) FindByUserID(ctx context.Context, userID string) ([]*d
 	}
 	defer rows.Close()
 
-	var user_groups []*domain.Group
+	user_groups := make([]*domain.Group, 0)
 	for rows.Next() {
 		group := &domain.Group{}
 		err := rows.Scan(&group.ID, &group.Name, &group.CreatedBy, &group.CreatedAt)
@@ -76,6 +76,31 @@ func (r *GroupRepository) IsMember(ctx context.Context, groupID string, userID s
 	query := `SELECT COUNT(*) FROM group_members WHERE group_id = ? AND user_id = ?`
 	err := r.db.QueryRowContext(ctx, query, groupID, userID).Scan(&count)
 	return count > 0, err
+}
+
+func (r *GroupRepository) GetMembers(ctx context.Context, groupID string) ([]*domain.User, error) {
+	query := `
+		SELECT u.id, u.name, u.email
+		FROM users u
+		JOIN group_members gm ON gm.user_id = u.id
+		WHERE gm.group_id = ?
+		ORDER BY gm.joined_at ASC
+	`
+	rows, err := r.db.QueryContext(ctx, query, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	members := make([]*domain.User, 0)
+	for rows.Next() {
+		user := &domain.User{}
+		if err := rows.Scan(&user.ID, &user.Name, &user.Email); err != nil {
+			return nil, err
+		}
+		members = append(members, user)
+	}
+	return members, nil
 }
 
 func (r *GroupRepository) GetMemberFCMTokens(ctx context.Context, groupID string) ([]string, error) {

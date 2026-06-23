@@ -24,12 +24,64 @@ func NewExpenseHandler(expenseService *service.ExpenseService, ocrService *servi
 }
 
 type createExpenseRequest struct {
-	PaidBy      string               `json:"paid_by"`
-	Amount      float64              `json:"amount"`
-	Description string               `json:"description"`
-	ReceiptURL  string               `json:"receipt_url"`
-	ExpenseDate string               `json:"expense_date"`
-	Splits      []domain.ExpenseSplit `json:"splits"`
+	PaidBy       string   `json:"paid_by"`
+	Amount       float64  `json:"amount"`
+	Description  string   `json:"description"`
+	ReceiptURL   string   `json:"receipt_url"`
+	ExpenseDate  string   `json:"expense_date"`
+	SplitUserIDs []string `json:"split_user_ids"`
+}
+
+func (h *ExpenseHandler) GetPersonalBalances(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(UserIDKey).(string)
+
+	balances, err := h.expenseService.GetPersonalBalances(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "erro ao buscar balanços")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, balances)
+}
+
+func (h *ExpenseHandler) Settle(w http.ResponseWriter, r *http.Request) {
+	payerID := r.Context().Value(UserIDKey).(string)
+
+	var req struct {
+		PayeeID string  `json:"payee_id"`
+		Amount  float64 `json:"amount"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.PayeeID == "" || req.Amount <= 0 {
+		writeError(w, http.StatusBadRequest, "payee_id e amount são obrigatórios")
+		return
+	}
+
+	if err := h.expenseService.Settle(r.Context(), payerID, req.PayeeID, req.Amount); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{"message": "pagamento registrado"})
+}
+
+func (h *ExpenseHandler) SettleReceived(w http.ResponseWriter, r *http.Request) {
+	payeeID := r.Context().Value(UserIDKey).(string)
+
+	var req struct {
+		PayerID string  `json:"payer_id"`
+		Amount  float64 `json:"amount"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.PayerID == "" || req.Amount <= 0 {
+		writeError(w, http.StatusBadRequest, "payer_id e amount são obrigatórios")
+		return
+	}
+
+	if err := h.expenseService.Settle(r.Context(), req.PayerID, payeeID, req.Amount); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{"message": "recebimento registrado"})
 }
 
 func (h *ExpenseHandler) ListGroupExpenses(w http.ResponseWriter, r *http.Request) {
@@ -63,10 +115,9 @@ func (h *ExpenseHandler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 		ReceiptURL:  req.ReceiptURL,
 		ExpenseDate: req.ExpenseDate,
-		Splits:      req.Splits,
 	}
 
-	created, err := h.expenseService.CreateExpense(r.Context(), userID, expense)
+	created, err := h.expenseService.CreateExpense(r.Context(), userID, expense, req.SplitUserIDs)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -77,7 +128,7 @@ func (h *ExpenseHandler) CreateExpense(w http.ResponseWriter, r *http.Request) {
 
 func (h *ExpenseHandler) DeleteExpense(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(UserIDKey).(string)
-	expenseID := chi.URLParam(r, "id")
+	expenseID := chi.URLParam(r, "expenseID")
 
 	err := h.expenseService.DeleteExpense(r.Context(), expenseID, userID)
 	if err != nil {
