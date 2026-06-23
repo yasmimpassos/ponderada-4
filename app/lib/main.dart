@@ -5,10 +5,12 @@ import 'screen/groups_screen.dart';
 import 'screen/join_group_screen.dart';
 import 'service/auth_service.dart';
 import 'service/config_service.dart';
+import 'service/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ConfigService.load();
+  await NotificationService.init();
   runApp(const RachaHistoricoApp());
 }
 

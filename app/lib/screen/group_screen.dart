@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import '../domain/group.dart';
 import '../domain/expense.dart';
 import '../service/expense_service.dart';
@@ -112,15 +113,24 @@ class _GroupScreenState extends State<GroupScreen>
               child: const Text('Fechar'),
             ),
             FilledButton.icon(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: inviteLink));
+              onPressed: () async {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Link copiado!')),
-                );
+                try {
+                  await Share.share(
+                    inviteLink,
+                    subject: 'Convite para ${widget.group.name}',
+                  );
+                } catch (_) {
+                  await Clipboard.setData(ClipboardData(text: inviteLink));
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Link copiado!')),
+                    );
+                  }
+                }
               },
-              icon: const Icon(Icons.copy),
-              label: const Text('Copiar'),
+              icon: const Icon(Icons.share),
+              label: const Text('Compartilhar'),
             ),
           ],
         );

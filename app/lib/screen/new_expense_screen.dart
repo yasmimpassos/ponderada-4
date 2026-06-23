@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../domain/group.dart';
 import '../service/expense_service.dart';
+import '../service/notification_service.dart';
 
 class NewExpenseScreen extends StatefulWidget {
   final String groupId;
@@ -91,13 +92,16 @@ class _NewExpenseScreenState extends State<NewExpenseScreen> {
     try {
       final dateStr =
           '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+      final description = _descriptionController.text.trim();
+      final amount = double.parse(_amountController.text.replaceAll(',', '.'));
       await _expenseService.createExpense(
         groupId: widget.groupId,
-        description: _descriptionController.text.trim(),
-        amount: double.parse(_amountController.text.replaceAll(',', '.')),
+        description: description,
+        amount: amount,
         expenseDate: dateStr,
         splitUserIds: _selectedMemberIds,
       );
+      await NotificationService.showExpenseAdded(description, amount);
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
